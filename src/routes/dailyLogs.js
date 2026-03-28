@@ -42,7 +42,9 @@ router.post('/', authenticateToken, async (req, res) => {
       );
 
       const [updated] = await pool.execute('SELECT * FROM daily_logs WHERE id = ?', [existing[0].id]);
-      return res.json({ message: 'Daily log updated', log: updated[0] });
+      const log = updated[0];
+      log.symptoms = log.symptoms ? JSON.parse(log.symptoms) : [];
+      return res.json({ message: 'Daily log updated', log });
     }
 
     const [result] = await pool.execute(
@@ -61,7 +63,9 @@ router.post('/', authenticateToken, async (req, res) => {
     );
 
     const [rows] = await pool.execute('SELECT * FROM daily_logs WHERE id = ?', [result.insertId]);
-    res.status(201).json({ message: 'Daily log created', log: rows[0] });
+    const log = rows[0];
+    log.symptoms = log.symptoms ? JSON.parse(log.symptoms) : [];
+    res.status(201).json({ message: 'Daily log created', log });
   } catch (err) {
     console.error('Add daily log error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -88,7 +92,11 @@ router.get('/', authenticateToken, async (req, res) => {
     query += ' ORDER BY date DESC';
 
     const [logs] = await pool.execute(query, params);
-    res.json(logs);
+    const parsedLogs = logs.map(log => ({
+      ...log,
+      symptoms: log.symptoms ? JSON.parse(log.symptoms) : []
+    }));
+    res.json(parsedLogs);
   } catch (err) {
     console.error('Get daily logs error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -107,7 +115,9 @@ router.get('/:date', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Log not found for this date' });
     }
 
-    res.json(rows[0]);
+    const log = rows[0];
+    log.symptoms = log.symptoms ? JSON.parse(log.symptoms) : [];
+    res.json(log);
   } catch (err) {
     console.error('Get daily log error:', err);
     res.status(500).json({ error: 'Internal server error' });
