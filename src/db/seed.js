@@ -8,6 +8,7 @@ async function seed() {
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'menstrual_health_companion',
+    port: process.env.DB_PORT || 3306,
     waitForConnections: true,
     connectionLimit: 5,
   });
