@@ -1,64 +1,164 @@
-# ⚙️ Backend API — Menstrual Health Companion
+<![CDATA[<div align="center">
 
-REST API backend dibangun dengan **Express.js** dan database **MySQL**, menyediakan autentikasi JWT, CRUD operations, dan integrasi dengan ML Service untuk prediksi siklus menstruasi.
+# ⚙️ YeoCycles — Backend API
+
+### Menstrual Health Companion · RESTful API Server
+
+[![Express.js](https://img.shields.io/badge/Express.js-4.21-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![JWT](https://img.shields.io/badge/JWT-Auth-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**REST API backend** menyediakan autentikasi JWT, CRUD operations untuk data siklus & log harian, serta integrasi dengan ML Service untuk prediksi berbasis deep learning.
+
+[Fitur](#-fitur-utama) · [Arsitektur](#️-arsitektur) · [API Reference](#-api-reference) · [Database](#️-database-schema) · [Quick Start](#-quick-start)
+
+</div>
+
+---
+
+## 🏗️ Arsitektur
+
+### Full-Stack Overview
+
+<p align="center">
+  <img src="docs/images/system_architecture.png" alt="System Architecture" width="700" />
+</p>
+
+### Backend API Architecture
+
+<p align="center">
+  <img src="docs/images/api_architecture.png" alt="API Architecture" width="600" />
+</p>
+
+### Request Lifecycle — Detail
+
+Setiap HTTP request melewati pipeline middleware berikut sebelum mencapai route handler:
+
+```mermaid
+graph LR
+    Client["🌐 Client<br/>(React SPA)"] -->|"HTTP Request"| CORS["CORS<br/>Middleware"]
+    CORS --> JSON["JSON<br/>Body Parser"]
+    JSON --> Auth{"Auth<br/>Required?"}
+    
+    Auth -->|"No (Public)"| PublicRoutes["🔓 Public Routes<br/>POST /auth/register<br/>POST /auth/login<br/>GET /health"]
+    Auth -->|"Yes (Protected)"| JWTVerify["🔒 JWT Verify<br/>auth.js middleware"]
+    
+    JWTVerify -->|"Valid Token"| ProtectedRoutes["🔐 Protected Routes<br/>Cycles, Logs,<br/>Predictions, etc."]
+    JWTVerify -->|"Invalid/Expired"| Reject["❌ 401/403<br/>Unauthorized"]
+    
+    ProtectedRoutes --> DB[("🗄️ MySQL<br/>Database")]
+    ProtectedRoutes -->|"/predictions"| ML["🧠 ML Service<br/>Flask API"]
+    PublicRoutes --> DB
+
+    style Client fill:#ec4899,stroke:#fff,color:#fff
+    style JWTVerify fill:#a855f7,stroke:#fff,color:#fff
+    style DB fill:#3b82f6,stroke:#fff,color:#fff
+    style ML fill:#10b981,stroke:#fff,color:#fff
+    style Reject fill:#ef4444,stroke:#fff,color:#fff
+```
+
+### Server Startup Sequence
+
+```mermaid
+sequenceDiagram
+    participant S as 🚀 server.js
+    participant DB as 🗄️ database.js
+    participant MySQL as 💾 MySQL Server
+    participant Routes as 🔌 Route Modules
+
+    S->>S: Load environment (.env)
+    S->>S: Initialize Express app
+    S->>S: Apply CORS middleware
+    S->>S: Apply JSON body parser
+    
+    S->>Routes: Mount route modules
+    Note over S,Routes: /api/auth → auth.js<br/>/api/cycles → cycles.js<br/>/api/daily-logs → dailyLogs.js<br/>/api/predictions → predictions.js<br/>/api/feedback → feedback.js<br/>/api/profile → profile.js
+    
+    S->>DB: initializeDatabase()
+    DB->>MySQL: CREATE TABLE IF NOT EXISTS users
+    DB->>MySQL: CREATE TABLE IF NOT EXISTS menstrual_cycles
+    DB->>MySQL: CREATE TABLE IF NOT EXISTS daily_logs
+    DB->>MySQL: CREATE TABLE IF NOT EXISTS predictions
+    DB->>MySQL: CREATE TABLE IF NOT EXISTS feedback
+    DB->>MySQL: CREATE INDEX (3 indexes)
+    MySQL-->>DB: ✅ Tables ready
+    DB-->>S: ✅ Database initialized
+    
+    S->>S: app.listen(PORT)
+    Note over S: 🟢 Server running on :5000
+```
+
+---
+
+## ✨ Fitur Utama
+
+| Fitur | Deskripsi |
+|-------|-----------|
+| 🔐 **JWT Authentication** | Register & login dengan token-based auth (expires 7 hari) |
+| 🩸 **Cycle CRUD** | Create, Read, Update, Delete data siklus menstruasi |
+| 📋 **Daily Logs** | Pencatatan mood, symptoms, tidur, stres, puasa harian |
+| 🧠 **ML Integration** | Proxy ke Flask ML Service untuk prediksi siklus (LSTM) |
+| 📊 **Predictions History** | Menyimpan & mengambil riwayat prediksi |
+| 💬 **Feedback System** | User feedback untuk akurasi prediksi model |
+| 👤 **Profile Management** | CRUD profil pengguna |
+| 🛡️ **Security** | bcrypt hashing, parameterized queries, CORS |
+| 🗄️ **Auto-Migration** | Tabel database dibuat otomatis saat pertama start |
+| ❤️ **Health Check** | Endpoint `/api/health` untuk monitoring |
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Technology             | Purpose                        |
-| ---------------------- | ------------------------------ |
-| **Express.js 4.21**    | Web framework                  |
-| **MySQL 8.0+**         | Relational database            |
-| **mysql2 3.x**         | Async MySQL driver             |
-| **JWT (jsonwebtoken)** | Token-based authentication     |
-| **bcryptjs**           | Password hashing               |
-| **Axios**              | HTTP client (ML Service calls) |
-| **dotenv**             | Environment variables          |
-| **CORS**               | Cross-origin resource sharing  |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **Express.js** | 4.21 | Web framework (REST API) |
+| **MySQL** | 8.0+ | Relational database |
+| **mysql2** | 3.x | Async MySQL driver (Promise-based) |
+| **jsonwebtoken** | 9.x | Token-based authentication |
+| **bcryptjs** | 2.x | Password hashing (12 salt rounds) |
+| **Axios** | 1.x | HTTP client (ML Service integration) |
+| **dotenv** | 16.x | Environment variable management |
+| **cors** | 2.x | Cross-Origin Resource Sharing |
+| **nodemon** | 3.x | Dev auto-reload |
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Node.js ≥ 18.x
-- MySQL ≥ 8.0
-
-### Installation
-
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Clone & install
+git clone https://github.com/Coding-Camp-Capstone-Project-2026/backend.git
+cd backend && npm install
 
 # 2. Setup environment
-cp .env.example .env
-# Edit .env with your MySQL credentials
+cp .env.example .env    # Edit .env dengan credentials MySQL Anda
 
-# 3. Ensure MySQL is running & database exists
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS menstrual_health_companion;"
+# 3. Create database
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS menstrual_health_companion;"
 
 # 4. Start server
+npm run dev     # Development (nodemon auto-reload)
 npm start       # Production
-npm run dev     # Development (auto-reload)
 ```
 
-Server berjalan di `http://localhost:5000`
+> **💡**: Tabel database dibuat otomatis saat server pertama kali start.
 
 ---
 
 ## 🔧 Environment Variables
 
-| Variable         | Default                      | Description                                |
-| ---------------- | ---------------------------- | ------------------------------------------ |
-| `PORT`           | `5000`                       | Server port                                |
-| `JWT_SECRET`     | -                            | **Required.** Secret key untuk JWT signing |
-| `ML_SERVICE_URL` | `http://localhost:5001`      | URL ML prediction service                  |
-| `DB_HOST`        | `localhost`                  | MySQL host                                 |
-| `DB_USER`        | `root`                       | MySQL username                             |
-| `DB_PASSWORD`    | _(empty)_                    | MySQL password                             |
-| `DB_NAME`        | `menstrual_health_companion` | MySQL database name                        |
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `PORT` | `5000` | ❌ | Port server |
+| `JWT_SECRET` | — | ✅ | Secret key untuk JWT (min 32 char) |
+| `ML_SERVICE_URL` | `http://localhost:5001` | ❌ | URL ML Service |
+| `DB_HOST` | `localhost` | ❌ | MySQL host |
+| `DB_USER` | `root` | ❌ | MySQL username |
+| `DB_PASSWORD` | _(empty)_ | ❌ | MySQL password |
+| `DB_NAME` | `menstrual_health_companion` | ❌ | Database name |
+
+> **⚠️ Security**: File `.env` sudah di `.gitignore`. **JANGAN** commit credentials!
 
 ---
 
@@ -67,226 +167,284 @@ Server berjalan di `http://localhost:5000`
 ```
 backend/
 ├── package.json            # Dependencies & scripts
-├── .env.example            # Environment template
-├── .env                    # Environment variables (gitignored)
+├── .env.example            # Environment template (safe)
+├── .env                    # Credentials (GITIGNORED)
+├── .gitignore              # Ignore rules
+├── docs/
+│   └── images/             # Architecture visuals
 └── src/
-    ├── server.js           # 🚀 Express app entry point
+    ├── server.js           # 🚀 Express entry point
     ├── db/
-    │   └── database.js     # 🗄️ MySQL pool + table initialization
+    │   └── database.js     # 🗄️ MySQL pool + auto-migration
     ├── middleware/
-    │   └── auth.js         # 🔒 JWT verification middleware
+    │   └── auth.js         # 🔒 JWT verification
     └── routes/
-        ├── auth.js         # POST /api/auth/register, /login
-        ├── profile.js      # GET, PUT /api/profile
-        ├── cycles.js       # CRUD /api/cycles
-        ├── dailyLogs.js    # CRUD /api/daily-logs
-        ├── predictions.js  # GET /api/predictions
-        └── feedback.js     # POST, GET /api/feedback
+        ├── auth.js         # 🔐 Register & login
+        ├── profile.js      # 👤 Profile CRUD
+        ├── cycles.js       # 🩸 Menstrual cycles CRUD
+        ├── dailyLogs.js    # 📋 Daily logs CRUD
+        ├── predictions.js  # 🧠 ML predictions proxy
+        └── feedback.js     # 💬 Prediction feedback
 ```
 
 ---
 
 ## 🗄️ Database Schema
 
-Tabel dibuat secara otomatis saat server pertama kali dijalankan via `initializeDatabase()`.
+### Entity Relationship Diagram
 
-### Tables
+```mermaid
+erDiagram
+    users ||--o{ menstrual_cycles : "has many"
+    users ||--o{ daily_logs : "has many"
+    users ||--o{ predictions : "has many"
+    users ||--o{ feedback : "has many"
+    predictions ||--o{ feedback : "evaluated by"
 
-#### `users`
+    users {
+        int id PK
+        varchar name
+        varchar email UK
+        varchar password_hash
+        date date_of_birth
+        int avg_cycle_length
+        datetime created_at
+    }
 
-| Column           | Type         | Constraint                  |
-| ---------------- | ------------ | --------------------------- |
-| id               | INT          | PRIMARY KEY, AUTO_INCREMENT |
-| name             | VARCHAR(255) | NOT NULL                    |
-| email            | VARCHAR(255) | UNIQUE, NOT NULL            |
-| password_hash    | VARCHAR(255) | NOT NULL                    |
-| date_of_birth    | DATE         | nullable                    |
-| avg_cycle_length | INT          | DEFAULT 28                  |
-| created_at       | DATETIME     | DEFAULT CURRENT_TIMESTAMP   |
+    menstrual_cycles {
+        int id PK
+        int user_id FK
+        date start_date
+        date end_date
+        int cycle_length
+        int period_length
+        varchar flow_intensity
+        text notes
+        datetime created_at
+    }
 
-#### `menstrual_cycles`
+    daily_logs {
+        int id PK
+        int user_id FK
+        date date
+        int mood "1-5"
+        text symptoms "JSON"
+        int sleep_quality "1-5"
+        int stress_level "1-5"
+        tinyint is_fasting
+        text notes
+        datetime created_at
+    }
 
-| Column         | Type        | Constraint                        |
-| -------------- | ----------- | --------------------------------- |
-| id             | INT         | PRIMARY KEY, AUTO_INCREMENT       |
-| user_id        | INT         | FK → users(id), ON DELETE CASCADE |
-| start_date     | DATE        | NOT NULL                          |
-| end_date       | DATE        | nullable                          |
-| cycle_length   | INT         | nullable                          |
-| period_length  | INT         | nullable                          |
-| flow_intensity | VARCHAR(20) | DEFAULT 'medium'                  |
-| notes          | TEXT        | nullable                          |
-| created_at     | DATETIME    | DEFAULT CURRENT_TIMESTAMP         |
+    predictions {
+        int id PK
+        int user_id FK
+        date predicted_next_date
+        int predicted_cycle_length
+        float confidence "0-1"
+        varchar model_version
+        datetime created_at
+    }
 
-#### `daily_logs`
-
-| Column        | Type       | Constraint                        |
-| ------------- | ---------- | --------------------------------- |
-| id            | INT        | PRIMARY KEY, AUTO_INCREMENT       |
-| user_id       | INT        | FK → users(id), ON DELETE CASCADE |
-| date          | DATE       | NOT NULL                          |
-| mood          | INT        | CHECK 1-5                         |
-| symptoms      | TEXT       | nullable (JSON)                   |
-| sleep_quality | INT        | CHECK 1-5                         |
-| stress_level  | INT        | CHECK 1-5                         |
-| is_fasting    | TINYINT(1) | DEFAULT 0                         |
-| notes         | TEXT       | nullable                          |
-| created_at    | DATETIME   | DEFAULT CURRENT_TIMESTAMP         |
-
-#### `predictions`
-
-| Column                 | Type        | Constraint                        |
-| ---------------------- | ----------- | --------------------------------- |
-| id                     | INT         | PRIMARY KEY, AUTO_INCREMENT       |
-| user_id                | INT         | FK → users(id), ON DELETE CASCADE |
-| predicted_next_date    | DATE        | NOT NULL                          |
-| predicted_cycle_length | INT         | nullable                          |
-| confidence             | FLOAT       | nullable                          |
-| model_version          | VARCHAR(50) | DEFAULT '1.0'                     |
-| created_at             | DATETIME    | DEFAULT CURRENT_TIMESTAMP         |
-
-#### `feedback`
-
-| Column          | Type     | Constraint                               |
-| --------------- | -------- | ---------------------------------------- |
-| id              | INT      | PRIMARY KEY, AUTO_INCREMENT              |
-| user_id         | INT      | FK → users(id), ON DELETE CASCADE        |
-| prediction_id   | INT      | FK → predictions(id), ON DELETE SET NULL |
-| accuracy_rating | INT      | CHECK 1-5                                |
-| actual_date     | DATE     | nullable                                 |
-| comments        | TEXT     | nullable                                 |
-| created_at      | DATETIME | DEFAULT CURRENT_TIMESTAMP                |
+    feedback {
+        int id PK
+        int user_id FK
+        int prediction_id FK
+        int accuracy_rating "1-5"
+        date actual_date
+        text comments
+        datetime created_at
+    }
+```
 
 ### Indexes
 
-- `idx_cycles_user` — menstrual_cycles(user_id)
-- `idx_daily_logs_user_date` — daily_logs(user_id, date)
-- `idx_predictions_user` — predictions(user_id)
+```sql
+CREATE INDEX idx_cycles_user ON menstrual_cycles(user_id);
+CREATE INDEX idx_daily_logs_user_date ON daily_logs(user_id, date);
+CREATE INDEX idx_predictions_user ON predictions(user_id);
+```
 
 ---
 
 ## 🔌 API Reference
 
-### Authentication
+### Authentication (Public)
 
-#### Register
-
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "name": "Jane Doe",
-  "email": "jane@example.com",
-  "password": "securePassword123",
-  "date_of_birth": "1995-06-15"
-}
-```
-
-**Response** (201):
-
+#### `POST /api/auth/register`
 ```json
-{
-  "message": "Registration successful",
-  "token": "eyJhbGciOiJIUzI1...",
-  "user": { "id": 1, "name": "Jane Doe", "email": "jane@example.com" }
-}
+// Request
+{ "name": "Jane", "email": "jane@example.com", "password": "secret123", "date_of_birth": "1995-06-15" }
+
+// Response (201)
+{ "message": "Registration successful", "token": "eyJ...", "user": { "id": 1, "name": "Jane", "email": "jane@example.com" } }
 ```
 
-#### Login
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "jane@example.com",
-  "password": "securePassword123"
-}
-```
-
-**Response** (200):
-
+#### `POST /api/auth/login`
 ```json
-{
-  "message": "Login successful",
-  "token": "eyJhbGciOiJIUzI1...",
-  "user": { "id": 1, "name": "Jane Doe", "email": "jane@example.com" }
-}
+// Request
+{ "email": "jane@example.com", "password": "secret123" }
+
+// Response (200)
+{ "message": "Login successful", "token": "eyJ...", "user": { "id": 1, "name": "Jane", "email": "jane@example.com" } }
 ```
 
 ### Protected Endpoints
 
-Semua endpoint di bawah ini memerlukan header:
+> **Header wajib:** `Authorization: Bearer <token>`
 
+#### 🩸 Cycles
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/cycles` | Tambah siklus |
+| `GET` | `/api/cycles` | List semua siklus |
+| `GET` | `/api/cycles/:id` | Detail siklus |
+| `PUT` | `/api/cycles/:id` | Update siklus |
+| `DELETE` | `/api/cycles/:id` | Hapus siklus |
+
+#### 📋 Daily Logs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/daily-logs` | Tambah/update log |
+| `GET` | `/api/daily-logs?start_date=&end_date=` | Filter range |
+| `GET` | `/api/daily-logs/:date` | Log per tanggal |
+| `DELETE` | `/api/daily-logs/:id` | Hapus log |
+
+#### 🧠 Predictions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/predictions` | Generate prediksi → ML |
+| `GET` | `/api/predictions/history` | 20 prediksi terakhir |
+
+### Prediction Flow (ML Integration)
+
+```mermaid
+sequenceDiagram
+    participant C as 🌐 Client
+    participant B as ⚙️ Backend
+    participant DB as 🗄️ MySQL
+    participant ML as 🧠 ML Service
+
+    C->>B: GET /api/predictions
+    B->>DB: SELECT last 3 cycles WHERE user_id = ?
+    DB-->>B: cycles[]
+    
+    alt ML Service Available
+        B->>ML: POST /predict { cycles, sleep, stress, fasting }
+        ML->>ML: LSTM inference + confidence calc
+        ML-->>B: { predicted_cycle_length, confidence, model_version }
+        B->>DB: INSERT INTO predictions (...)
+        B-->>C: { prediction, confidence: 0.85 }
+    else ML Service Unreachable
+        B->>B: Calculate simple average
+        B->>DB: INSERT INTO predictions (model_version: 'fallback')
+        B-->>C: { prediction, confidence: 0.5, message: "fallback" }
+    end
 ```
-Authorization: Bearer <token>
-```
 
-#### Cycles
+#### 💬 Feedback · 👤 Profile · ❤️ Health
 
-- `POST /api/cycles` — Tambah siklus
-- `GET /api/cycles` — Daftar semua siklus
-- `GET /api/cycles/:id` — Detail siklus
-- `PUT /api/cycles/:id` — Update siklus
-- `DELETE /api/cycles/:id` — Hapus siklus
-
-#### Daily Logs
-
-- `POST /api/daily-logs` — Tambah/update log harian
-- `GET /api/daily-logs?start_date=&end_date=` — Filter log by date range
-- `GET /api/daily-logs/:date` — Log tanggal tertentu
-- `DELETE /api/daily-logs/:id` — Hapus log
-
-#### Predictions
-
-- `GET /api/predictions` — Dapatkan prediksi baru (calls ML Service)
-- `GET /api/predictions/history` — Riwayat 20 prediksi terakhir
-
-#### Feedback
-
-- `POST /api/feedback` — Submit feedback prediksi
-- `GET /api/feedback` — Semua feedback
-
-#### Profile
-
-- `GET /api/profile` — Lihat profil
-- `PUT /api/profile` — Update profil (name, date_of_birth, avg_cycle_length)
-
-#### Health Check
-
-- `GET /api/health` — Server status (no auth required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/feedback` | Submit feedback |
+| `GET` | `/api/feedback` | List feedback |
+| `GET` | `/api/profile` | Lihat profil |
+| `PUT` | `/api/profile` | Update profil |
+| `GET` | `/api/health` | Server status (no auth) |
 
 ---
 
 ## 🔒 Authentication Flow
 
+```mermaid
+sequenceDiagram
+    participant U as 👤 User
+    participant FE as 🖥️ React Frontend
+    participant BE as ⚙️ Express Backend
+    participant DB as 🗄️ MySQL
+
+    rect rgb(30, 30, 60)
+        Note over U,DB: Registration Flow
+        U->>FE: Fill register form
+        FE->>BE: POST /api/auth/register
+        BE->>BE: Validate input
+        BE->>BE: bcrypt.hash(password, 12)
+        BE->>DB: INSERT INTO users
+        DB-->>BE: user.id
+        BE->>BE: jwt.sign({ id, email }, secret, { expiresIn: '7d' })
+        BE-->>FE: { token, user }
+        FE->>FE: localStorage.setItem('token')
+    end
+
+    rect rgb(30, 40, 60)
+        Note over U,DB: Authenticated Request Flow
+        U->>FE: Navigate to Dashboard
+        FE->>FE: Attach "Authorization: Bearer <token>"
+        FE->>BE: GET /api/cycles
+        BE->>BE: auth.js: jwt.verify(token, secret)
+        BE->>BE: req.user = { id, email }
+        BE->>DB: SELECT * FROM menstrual_cycles WHERE user_id = ?
+        DB-->>BE: cycles[]
+        BE-->>FE: { cycles: [...] }
+    end
+
+    rect rgb(60, 30, 30)
+        Note over U,DB: Token Expiry Flow
+        FE->>BE: GET /api/cycles (expired token)
+        BE->>BE: jwt.verify → TokenExpiredError
+        BE-->>FE: 401 Unauthorized
+        FE->>FE: AuthContext.logout()
+        FE->>FE: localStorage.removeItem('token')
+        FE-->>U: Redirect to /login
+    end
 ```
-1. User POST /api/auth/register atau /login
-2. Server return JWT token (expires 7 days)
-3. Client simpan token di localStorage
-4. Setiap request ke protected endpoint, kirim header:
-   Authorization: Bearer <token>
-5. Middleware auth.js verify token → inject req.user = { id, email }
-```
+
+### Security Measures
+
+| Measure | Implementation |
+|---------|---------------|
+| **Password Hashing** | bcryptjs, 12 salt rounds |
+| **JWT Expiry** | 7 days (`expiresIn: '7d'`) |
+| **SQL Injection** | Parameterized queries (mysql2) |
+| **CORS** | Configurable allowed origins |
+| **Error Handling** | Consistent JSON, no stack traces |
+| **Environment Vars** | `.env` gitignored |
 
 ---
 
 ## ⚠️ Error Handling
 
-Semua error response menggunakan format konsisten:
-
 ```json
-{
-  "error": "Error message description"
-}
+{ "error": "Human-readable error message" }
 ```
 
-| Status Code | Description                          |
-| ----------- | ------------------------------------ |
-| 400         | Bad Request — missing/invalid fields |
-| 401         | Unauthorized — no/invalid token      |
-| 403         | Forbidden — expired token            |
-| 404         | Not Found                            |
-| 409         | Conflict — duplicate email           |
-| 500         | Internal Server Error                |
+| Status | Description | Example |
+|--------|-------------|---------|
+| `400` | Bad Request | Missing fields |
+| `401` | Unauthorized | Invalid token |
+| `403` | Forbidden | Expired token |
+| `404` | Not Found | ID not found |
+| `409` | Conflict | Duplicate email |
+| `500` | Server Error | DB connection fail |
+
+---
+
+## 🔗 Related Repositories
+
+| Repository | Description | Link |
+|------------|-------------|------|
+| **Frontend** | React SPA + Premium UI | [frontend](https://github.com/Coding-Camp-Capstone-Project-2026/frontend) |
+| **Backend** | Express REST API (this repo) | [backend](https://github.com/Coding-Camp-Capstone-Project-2026/backend) |
+| **Machine Learning** | Flask + LSTM Service | [machinelearning](https://github.com/Coding-Camp-Capstone-Project-2026/machinelearning) |
+
+---
+
+## 👥 Tim Pengembang
+
+Dibuat oleh **Ridho dan teman-teman** — Capstone Project Coding Camp 2026
+
+**Powered by [kamidukung.biz.id](https://kamidukung.biz.id/)**
+]]>
