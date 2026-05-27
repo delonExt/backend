@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # ⚙️ YeoCycles — Backend API
 
@@ -170,6 +170,7 @@ backend/
 ├── .env.example            # Environment template (safe)
 ├── .env                    # Credentials (GITIGNORED)
 ├── .gitignore              # Ignore rules
+├── schema.sql              # Database schema (reference)
 ├── docs/
 │   └── images/             # Architecture visuals
 └── src/
@@ -447,4 +448,4 @@ sequenceDiagram
 Dibuat oleh **Ridho dan teman-teman** — Capstone Project Coding Camp 2026
 
 **Powered by [kamidukung.biz.id](https://kamidukung.biz.id/)**
-]]>
+
