@@ -7,8 +7,21 @@ const router = express.Router();
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:5001';
 
-// GET /api/predictions — Get new prediction from ML service
-router.get('/', authenticateToken, async (req, res) => {
+// Helper to format dates to local YYYY-MM-DD strings without timezone shifting
+function formatDateLocal(date) {
+  if (!date) return null;
+  if (typeof date === 'string' && date.length === 10) return date;
+  
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// POST /api/predictions — Get new prediction from ML service
+router.post('/', authenticateToken, async (req, res) => {
   try {
     // Get user's cycle history
     const [cycles] = await pool.execute(
@@ -27,8 +40,24 @@ router.get('/', authenticateToken, async (req, res) => {
       const nextDate = new Date(lastStart);
       nextDate.setDate(nextDate.getDate() + avgCycle);
 
+      const nextDateStr = formatDateLocal(nextDate);
+
+      // Save prediction even in simple average case for history tracking
+      const [result] = await pool.execute(
+        `INSERT INTO predictions (user_id, predicted_next_date, predicted_cycle_length, confidence, model_version)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          req.user.id,
+          nextDateStr,
+          avgCycle,
+          0.5,
+          'simple_average'
+        ]
+      );
+
       return res.json({
-        predicted_next_date: nextDate.toISOString().split('T')[0],
+        id: result.insertId,
+        predicted_next_date: nextDateStr,
         predicted_cycle_length: avgCycle,
         confidence: 0.5,
         model_version: 'simple_average',
@@ -54,10 +83,10 @@ router.get('/', authenticateToken, async (req, res) => {
       const end = cycles[i].end_date || (cycles[i + 1] ? cycles[i + 1].start_date : null);
 
       const cycleLogs = dailyLogs.filter(log => {
-        const logDate = typeof log.date === 'string' ? log.date : new Date(log.date).toISOString().split('T')[0];
-        const startStr = typeof start === 'string' ? start : new Date(start).toISOString().split('T')[0];
+        const logDate = formatDateLocal(log.date);
+        const startStr = formatDateLocal(start);
         if (!end) return logDate >= startStr;
-        const endStr = typeof end === 'string' ? end : new Date(end).toISOString().split('T')[0];
+        const endStr = formatDateLocal(end);
         return logDate >= startStr && logDate < endStr;
       });
 
@@ -87,13 +116,15 @@ router.get('/', authenticateToken, async (req, res) => {
       const nextDate = new Date(lastStart);
       nextDate.setDate(nextDate.getDate() + (prediction.predicted_cycle_length || 28));
 
+      const nextDateStr = formatDateLocal(nextDate);
+
       // Save prediction
       const [result] = await pool.execute(
         `INSERT INTO predictions (user_id, predicted_next_date, predicted_cycle_length, confidence, model_version)
          VALUES (?, ?, ?, ?, ?)`,
         [
           req.user.id,
-          nextDate.toISOString().split('T')[0],
+          nextDateStr,
           prediction.predicted_cycle_length,
           prediction.confidence,
           prediction.model_version || '1.0'
@@ -102,7 +133,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
       res.json({
         id: result.insertId,
-        predicted_next_date: nextDate.toISOString().split('T')[0],
+        predicted_next_date: nextDateStr,
         predicted_cycle_length: prediction.predicted_cycle_length,
         confidence: prediction.confidence,
         model_version: prediction.model_version || '1.0'
@@ -116,8 +147,24 @@ router.get('/', authenticateToken, async (req, res) => {
       const nextDate = new Date(lastStart);
       nextDate.setDate(nextDate.getDate() + avgCycle);
 
+      const nextDateStr = formatDateLocal(nextDate);
+
+      // Save prediction even in fallback case for history tracking
+      const [result] = await pool.execute(
+        `INSERT INTO predictions (user_id, predicted_next_date, predicted_cycle_length, confidence, model_version)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          req.user.id,
+          nextDateStr,
+          avgCycle,
+          0.6,
+          'fallback_average'
+        ]
+      );
+
       res.json({
-        predicted_next_date: nextDate.toISOString().split('T')[0],
+        id: result.insertId,
+        predicted_next_date: nextDateStr,
         predicted_cycle_length: avgCycle,
         confidence: 0.6,
         model_version: 'fallback_average',
@@ -130,6 +177,28 @@ router.get('/', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/predictions/latest — Get latest saved prediction
+router.get('/latest', authenticateToken, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT * FROM predictions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1',
+      [req.user.id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'No predictions found' });
+    }
+
+    const prediction = rows[0];
+    prediction.predicted_next_date = formatDateLocal(prediction.predicted_next_date);
+
+    res.json(prediction);
+  } catch (err) {
+    console.error('Get latest prediction error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET /api/predictions/history
 router.get('/history', authenticateToken, async (req, res) => {
   try {
@@ -138,7 +207,12 @@ router.get('/history', authenticateToken, async (req, res) => {
       [req.user.id]
     );
 
-    res.json(predictions);
+    const formattedPredictions = predictions.map(p => ({
+      ...p,
+      predicted_next_date: formatDateLocal(p.predicted_next_date)
+    }));
+
+    res.json(formattedPredictions);
   } catch (err) {
     console.error('Get prediction history error:', err);
     res.status(500).json({ error: 'Internal server error' });
