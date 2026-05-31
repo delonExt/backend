@@ -23,6 +23,9 @@ const cycleRoutes = require('./routes/cycles');
 const dailyLogRoutes = require('./routes/dailyLogs');
 const predictionRoutes = require('./routes/predictions');
 const feedbackRoutes = require('./routes/feedback');
+const insightsRoutes = require('./routes/insights');
+const analyticsRoutes = require('./routes/analytics');
+const exportRoutes = require('./routes/export');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
@@ -30,6 +33,9 @@ app.use('/api/cycles', cycleRoutes);
 app.use('/api/daily-logs', dailyLogRoutes);
 app.use('/api/predictions', predictionRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/insights', insightsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/export', exportRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
