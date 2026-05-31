@@ -4,6 +4,19 @@ const authenticateToken = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper to format dates to local YYYY-MM-DD strings without timezone shifting
+function formatDateLocal(date) {
+  if (!date) return null;
+  if (typeof date === 'string' && date.length === 10) return date;
+  
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // POST /api/cycles
 router.post('/', authenticateToken, async (req, res) => {
   try {
@@ -13,13 +26,16 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Start date is required' });
     }
 
+    const formattedStart = formatDateLocal(start_date);
+    const formattedEnd = formatDateLocal(end_date);
+
     const [result] = await pool.execute(
       `INSERT INTO menstrual_cycles (user_id, start_date, end_date, cycle_length, period_length, flow_intensity, notes)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
         req.user.id,
-        start_date,
-        end_date || null,
+        formattedStart,
+        formattedEnd,
         cycle_length || null,
         period_length || null,
         flow_intensity || 'medium',
@@ -28,8 +44,11 @@ router.post('/', authenticateToken, async (req, res) => {
     );
 
     const [rows] = await pool.execute('SELECT * FROM menstrual_cycles WHERE id = ?', [result.insertId]);
+    const cycle = rows[0];
+    cycle.start_date = formatDateLocal(cycle.start_date);
+    cycle.end_date = formatDateLocal(cycle.end_date);
 
-    res.status(201).json({ message: 'Cycle added', cycle: rows[0] });
+    res.status(201).json({ message: 'Cycle added', cycle });
   } catch (err) {
     console.error('Add cycle error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -44,7 +63,13 @@ router.get('/', authenticateToken, async (req, res) => {
       [req.user.id]
     );
 
-    res.json(cycles);
+    const formattedCycles = cycles.map(c => ({
+      ...c,
+      start_date: formatDateLocal(c.start_date),
+      end_date: formatDateLocal(c.end_date)
+    }));
+
+    res.json(formattedCycles);
   } catch (err) {
     console.error('Get cycles error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -63,7 +88,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Cycle not found' });
     }
 
-    res.json(rows[0]);
+    const cycle = rows[0];
+    cycle.start_date = formatDateLocal(cycle.start_date);
+    cycle.end_date = formatDateLocal(cycle.end_date);
+
+    res.json(cycle);
   } catch (err) {
     console.error('Get cycle error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -84,24 +113,49 @@ router.put('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Cycle not found' });
     }
 
-    await pool.execute(
-      `UPDATE menstrual_cycles SET
-        start_date = COALESCE(?, start_date),
-        end_date = COALESCE(?, end_date),
-        cycle_length = COALESCE(?, cycle_length),
-        period_length = COALESCE(?, period_length),
-        flow_intensity = COALESCE(?, flow_intensity),
-        notes = COALESCE(?, notes)
-      WHERE id = ? AND user_id = ?`,
-      [
-        start_date || null, end_date || null, cycle_length || null,
-        period_length || null, flow_intensity || null, notes || null,
-        req.params.id, req.user.id
-      ]
-    );
+    const fields = [];
+    const params = [];
+
+    if (start_date !== undefined) {
+      fields.push('start_date = ?');
+      params.push(formatDateLocal(start_date));
+    }
+    if (end_date !== undefined) {
+      fields.push('end_date = ?');
+      params.push(formatDateLocal(end_date));
+    }
+    if (cycle_length !== undefined) {
+      fields.push('cycle_length = ?');
+      params.push(cycle_length);
+    }
+    if (period_length !== undefined) {
+      fields.push('period_length = ?');
+      params.push(period_length);
+    }
+    if (flow_intensity !== undefined) {
+      fields.push('flow_intensity = ?');
+      params.push(flow_intensity);
+    }
+    if (notes !== undefined) {
+      fields.push('notes = ?');
+      params.push(notes || null);
+    }
+
+    if (fields.length > 0) {
+      params.push(req.params.id);
+      params.push(req.user.id);
+      await pool.execute(
+        `UPDATE menstrual_cycles SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
+        params
+      );
+    }
 
     const [updated] = await pool.execute('SELECT * FROM menstrual_cycles WHERE id = ?', [req.params.id]);
-    res.json({ message: 'Cycle updated', cycle: updated[0] });
+    const cycle = updated[0];
+    cycle.start_date = formatDateLocal(cycle.start_date);
+    cycle.end_date = formatDateLocal(cycle.end_date);
+
+    res.json({ message: 'Cycle updated', cycle });
   } catch (err) {
     console.error('Update cycle error:', err);
     res.status(500).json({ error: 'Internal server error' });
