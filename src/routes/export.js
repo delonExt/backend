@@ -23,6 +23,13 @@ router.get('/csv', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const { range } = req.query; // '3', '6', or 'all'
 
+    // Fetch user details first
+    const [userRows] = await pool.execute(
+      'SELECT name, email FROM users WHERE id = ?',
+      [userId]
+    );
+    const user = userRows[0] || { name: 'Pengguna YeoCycles', email: '' };
+
     let query = 'SELECT * FROM daily_logs WHERE user_id = ?';
     const params = [userId];
 
@@ -36,9 +43,19 @@ router.get('/csv', authenticateToken, async (req, res) => {
 
     const [rows] = await pool.execute(query, params);
 
-    // Format as CSV
-    let csvContent = '\uFEFF'; // UTF-8 BOM for Excel compatibility
-    csvContent += 'Tanggal,Mood (1-5),Kualitas Tidur (1-5),Tingkat Stres (1-5),Puasa,Gejala,Catatan\n';
+    // Format as CSV with UTF-8 BOM for Excel compatibility
+    let csvContent = '\uFEFF'; 
+    
+    // Title and User Meta Header Block
+    csvContent += 'LAPORAN REKAM MEDIS HARIAN - YEOCYCLES\n';
+    csvContent += `Nama Pengguna,"${user.name}"\n`;
+    csvContent += `Email Terdaftar,"${user.email}"\n`;
+    csvContent += `Tanggal Unduh,"${formatDateLocal(new Date())}"\n`;
+    csvContent += `Rentang Laporan,"${range === 'all' ? 'Semua Riwayat' : `${range} Bulan Terakhir`}"\n`;
+    csvContent += `Jumlah Catatan,"${rows.length} hari"\n\n`;
+
+    // Column Headers
+    csvContent += 'Tanggal,Mood (1-5),Kualitas Tidur (1-5),Tingkat Stres (1-5),Puasa,Gejala Fisik,Catatan Harian\n';
 
     rows.forEach(log => {
       const date = formatDateLocal(log.date);
@@ -53,6 +70,7 @@ router.get('/csv', authenticateToken, async (req, res) => {
         try {
           const arr = JSON.parse(log.symptoms);
           if (Array.isArray(arr)) {
+            // Translate symptoms to Indonesian for consistency if needed, or leave as logged
             symptomsStr = arr.join('; ');
           }
         } catch (e) {
@@ -68,7 +86,7 @@ router.get('/csv', authenticateToken, async (req, res) => {
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename=Laporan_Kesehatan_YeoCycles_${formatDateLocal(new Date())}.csv`);
+    res.setHeader('Content-Disposition', `attachment; filename=Laporan_YeoCycles_${user.name.replace(/[^a-z0-9]/gi, '_')}_${formatDateLocal(new Date())}.csv`);
     
     return res.status(200).send(csvContent);
   } catch (err) {
