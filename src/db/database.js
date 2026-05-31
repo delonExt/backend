@@ -13,24 +13,26 @@ const pool = mysql.createPool({
 });
 
 async function initializeDatabase() {
-  const dbName = process.env.DB_NAME || 'menstrual_health_companion';
+  // const dbName = process.env.DB_NAME || 'menstrual_health_companion';
   
-  // Create the database if it doesn't exist using a direct connection without a specified database
-  const tempConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-  };
+  // // Create the database if it doesn't exist using a direct connection without a specified database
+  // const tempConfig = {
+  //   host: process.env.DB_HOST || 'localhost',
+  //   user: process.env.DB_USER || 'root',
+  //   password: process.env.DB_PASSWORD || '',
+  //   database: process.env.DB_NAME || 'menstrual_health_companion',
+  //   port: process.env.DB_PORT || 3306,
+  // };
   
-  try {
-    const tempConnection = await mysql.createConnection(tempConfig);
-    await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
-    await tempConnection.end();
-    console.log(`✅ Database "${dbName}" ensured/created`);
-  } catch (err) {
-    console.error(`❌ Failed to ensure database "${dbName}":`, err);
-    throw err;
-  }
+  // try {
+  //   const tempConnection = await mysql.createConnection(tempConfig);
+  //   await tempConnection.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\``);
+  //   await tempConnection.end();
+  //   console.log(`✅ Database "${dbName}" ensured/created`);
+  // } catch (err) {
+  //   console.error(`❌ Failed to ensure database "${dbName}":`, err);
+  //   throw err;
+  // }
 
   const connection = await pool.getConnection();
   try {
